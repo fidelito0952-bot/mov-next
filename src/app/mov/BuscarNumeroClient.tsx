@@ -262,6 +262,11 @@ export default function BuscarNumeroClient() {
                     alt="Bancolombia"
                     className="mx-2 mb-2 h-5"
                   />
+                  <img
+                    src="/movistar/FORMA_PAGO_RAPPI.png"
+                    alt="Rappi Pay"
+                    className="mx-2 mb-2 h-5"
+                  />
                 </div>
                 <div className="flex items-center justify-center flex-col mt-2 space-y-2">
                   <p className="text-sm text-gray-600 md:hidden">

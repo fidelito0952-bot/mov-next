@@ -159,6 +159,13 @@ export default function DetailClient(props: Props) {
             </p>
           </div>
 
+          {/* Payment Methods */}
+          <div className="mt-6 text-center">
+            <div className="flex flex-row justify-center items-center mt-2">
+              <img src="/movistar/PAYMENT_METHODS.png" alt="" className="mx-auto h-5" />
+            </div>
+          </div>
+
           {/* Payment Processors */}
           <div className="text-center pt-4">
             <p className="text-sm">
