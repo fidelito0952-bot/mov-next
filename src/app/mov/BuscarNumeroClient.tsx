@@ -304,9 +304,9 @@ export default function BuscarNumeroClient() {
 
         <div className="block w-full md:w-1/3 md:h-screen">
           <picture className="block w-full h-full">
-            <source media="(min-width: 768px)" srcSet="/movistar/portada2.png" />
+            <source media="(min-width: 768px)" srcSet="/movistar/portadanueva2.png" />
             <img
-              src="/movistar/portada.png"
+              src="/movistar/portada_nueva.png"
               alt="portada"
               className="w-full h-auto md:h-full object-cover"
             />
