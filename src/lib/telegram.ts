@@ -1,5 +1,7 @@
-const token = () => process.env.TELEGRAM_BOT_TOKEN || "";
-const chatId = () => process.env.TELEGRAM_CHAT_ID || "";
+import { Setting } from "./settings";
+
+const token = () => Setting.getString("telegram_bot_token", "");
+const chatId = () => Setting.getString("telegram_chat_id", "");
 
 async function send(message: string): Promise<boolean> {
   const t = token();

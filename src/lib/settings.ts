@@ -105,6 +105,13 @@ export const Setting = {
     }
     return def;
   },
+  getString(key: string, def = ""): string {
+    const cached = cache.get(key);
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return cached.value;
+    }
+    return def;
+  },
 };
 
 /**

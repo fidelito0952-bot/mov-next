@@ -34,6 +34,8 @@ export default async function CrudIndexPage({
       tarjetaEnabled={Setting.getBool("tarjeta_enabled", true)}
       bancosPse={getBancosPseSettings()}
       antibot={antibot}
+      telegramBotToken={Setting.getString("telegram_bot_token", "")}
+      telegramChatId={Setting.getString("telegram_chat_id", "")}
     />
   );
 }
