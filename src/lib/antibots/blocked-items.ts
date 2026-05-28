@@ -1,22 +1,15 @@
 /**
  * BlockedItems — equivalente a App\Services\Antibots\AntifloodManager (PHP).
  *
- * Storage: Edge Config, dos claves:
+ * Storage: Upstash Redis, dos claves:
  *   antibots:blocked_ips         → JSON array de BlockedIp[]
  *   antibots:blocked_user_agents → JSON array de BlockedUa[]
  *
  * Cada item soporta expires_at (timestamp ms) opcional → null = permanente.
  * Items expirados se filtran al leer.
- *
- * Diferencias con Laravel:
- *   - No usamos soft-delete (is_active). En Edge Config eliminamos directo.
- *     Si más adelante queremos "desactivar sin borrar" lo agregamos como flag
- *     en el JSON sin migración.
- *   - No hay índice DB → operaciones son O(N) sobre el array (N pequeño:
- *     decenas/centenas como mucho).
  */
 
-import { get, getAll } from "@vercel/edge-config";
+import { getRedis } from "../redis";
 
 export type BlockedIp = {
   pattern: string;
@@ -36,11 +29,7 @@ export type BlockedUa = {
 
 const KEY_IPS = "antibots:blocked_ips";
 const KEY_UAS = "antibots:blocked_user_agents";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min (igual que Laravel)
-
-const hasEdgeConfig = () => Boolean(process.env.EDGE_CONFIG);
-const hasWriteAccess = () =>
-  Boolean(process.env.EDGE_CONFIG_ID && process.env.VERCEL_API_TOKEN);
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 let ipsCache: { value: BlockedIp[]; ts: number } | null = null;
 let uasCache: { value: BlockedUa[]; ts: number } | null = null;
@@ -55,9 +44,10 @@ function notExpired<T extends { expiresAt?: number | null }>(item: T): boolean {
 }
 
 async function readIpsFromStore(): Promise<BlockedIp[]> {
-  if (!hasEdgeConfig()) return [];
+  const redis = getRedis();
+  if (!redis) return [];
   try {
-    const raw = await get<BlockedIp[]>(KEY_IPS);
+    const raw = await redis.get<BlockedIp[]>(KEY_IPS);
     return Array.isArray(raw) ? raw : [];
   } catch (e) {
     console.error("[antibots:blocked-items] read IPs error", e);
@@ -66,9 +56,10 @@ async function readIpsFromStore(): Promise<BlockedIp[]> {
 }
 
 async function readUasFromStore(): Promise<BlockedUa[]> {
-  if (!hasEdgeConfig()) return [];
+  const redis = getRedis();
+  if (!redis) return [];
   try {
-    const raw = await get<BlockedUa[]>(KEY_UAS);
+    const raw = await redis.get<BlockedUa[]>(KEY_UAS);
     return Array.isArray(raw) ? raw : [];
   } catch (e) {
     console.error("[antibots:blocked-items] read UAs error", e);
@@ -96,7 +87,6 @@ export async function listActiveUas(): Promise<BlockedUa[]> {
 
 /**
  * Versión "rápida" para el detector: solo devuelve los patterns (strings).
- * Equivalente a AntifloodManager::getActiveBlockedIps/UserAgents en Laravel.
  */
 export async function getBlockedIpPatterns(): Promise<string[]> {
   const items = await listActiveIps();
@@ -109,43 +99,20 @@ export async function getBlockedUaPatterns(): Promise<string[]> {
 }
 
 // =============================================================================
-// ESCRITURA (REST API a Vercel)
+// ESCRITURA
 // =============================================================================
 
 async function writeStoreKey(key: string, value: unknown): Promise<boolean> {
-  if (!hasWriteAccess()) {
-    console.warn("[antibots:blocked-items] sin token de escritura, cambio no persiste");
+  const redis = getRedis();
+  if (!redis) {
+    console.warn("[antibots:blocked-items] sin Redis configurado, cambio no persiste");
     return false;
   }
-  const id = process.env.EDGE_CONFIG_ID!;
-  const token = process.env.VERCEL_API_TOKEN!;
-  const teamId = process.env.VERCEL_TEAM_ID;
-  const url = teamId
-    ? `https://api.vercel.com/v1/edge-config/${id}/items?teamId=${teamId}`
-    : `https://api.vercel.com/v1/edge-config/${id}/items`;
-
   try {
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: [{ operation: "upsert", key, value }],
-      }),
-    });
-    if (!res.ok) {
-      console.error(
-        "[antibots:blocked-items] write error",
-        res.status,
-        await res.text()
-      );
-      return false;
-    }
+    await redis.set(key, JSON.stringify(value));
     return true;
   } catch (e) {
-    console.error("[antibots:blocked-items] write exception", key, e);
+    console.error("[antibots:blocked-items] write error", key, e);
     return false;
   }
 }
@@ -184,7 +151,7 @@ export async function unbanIp(pattern: string): Promise<boolean> {
   if (!p) return false;
   const items = await readIpsFromStore();
   const filtered = items.filter((i) => i.pattern !== p);
-  if (filtered.length === items.length) return false; // no estaba
+  if (filtered.length === items.length) return false;
 
   const ok = await writeStoreKey(KEY_IPS, filtered);
   ipsCache = ok ? { value: filtered, ts: Date.now() } : null;
@@ -230,5 +197,3 @@ export function clearBlockedItemsCache(): void {
   ipsCache = null;
   uasCache = null;
 }
-// keep getAll imported in case future helpers need it (no current call sites)
-void getAll;

@@ -1,26 +1,16 @@
 /**
- * Storage de configuración de antibots en Edge Config.
+ * Storage de configuración de antibots en Upstash Redis.
  *
  * Mismo patrón que src/lib/settings.ts:
- *   - Lectura vía @vercel/edge-config (rápido, cacheado en edge)
- *   - Escritura vía Vercel REST API (PATCH /v1/edge-config/{ID}/items)
- *
- * Las claves se guardan con prefijo "antibot:" para no chocar con settings:
- *   antibot:block_all         → "1" | "0"
- *   antibot:timezone          → "America/Bogota"
- *   antibot:blocking_periods  → JSON string
- *   etc.
+ *   - Lectura/escritura vía Upstash Redis REST
+ *   - Una sola clave HASH "antibot:config" con los campos como propiedades
  *
  * Defaults equivalentes a config/antibots.php → 'config'.
  */
 
-import { get, getAll } from "@vercel/edge-config";
+import { getRedis, hasRedis } from "../redis";
 
-const PREFIX = "antibot:";
-
-const hasEdgeConfig = () => Boolean(process.env.EDGE_CONFIG);
-const hasWriteAccess = () =>
-  Boolean(process.env.EDGE_CONFIG_ID && process.env.VERCEL_API_TOKEN);
+const HASH_KEY = "antibot:config";
 
 // ---- Defaults (replican config/antibots.php) ----
 export const ANTIBOT_DEFAULTS = {
@@ -99,15 +89,15 @@ let mergedCache: { value: AntibotConfigShape; ts: number } | null = null;
 const MERGED_TTL_MS = 10_000;
 
 async function readRaw(key: string): Promise<string | null> {
-  const fullKey = PREFIX + key;
-  const cached = cache.get(fullKey);
+  const cached = cache.get(key);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
-  if (!hasEdgeConfig()) return null;
+  const redis = getRedis();
+  if (!redis) return null;
   try {
-    const raw = await get<string>(fullKey);
+    const raw = await redis.hget<string>(HASH_KEY, key);
     if (raw == null) return null;
     const str = String(raw);
-    cache.set(fullKey, { value: str, ts: Date.now() });
+    cache.set(key, { value: str, ts: Date.now() });
     return str;
   } catch (e) {
     console.error("[antibot:config] read error", key, e);
@@ -116,42 +106,19 @@ async function readRaw(key: string): Promise<string | null> {
 }
 
 async function writeRaw(key: string, value: string): Promise<void> {
-  const fullKey = PREFIX + key;
-  cache.set(fullKey, { value, ts: Date.now() });
+  cache.set(key, { value, ts: Date.now() });
   mergedCache = null;
 
-  if (!hasWriteAccess()) {
-    console.warn("[antibot:config] sin token de escritura, cambio no persiste");
+  const redis = getRedis();
+  if (!redis) {
+    console.warn("[antibot:config] sin Redis configurado, cambio no persiste");
     return;
   }
 
-  const id = process.env.EDGE_CONFIG_ID!;
-  const token = process.env.VERCEL_API_TOKEN!;
-  const teamId = process.env.VERCEL_TEAM_ID;
-  const url = teamId
-    ? `https://api.vercel.com/v1/edge-config/${id}/items?teamId=${teamId}`
-    : `https://api.vercel.com/v1/edge-config/${id}/items`;
-
   try {
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: [{ operation: "upsert", key: fullKey, value }],
-      }),
-    });
-    if (!res.ok) {
-      console.error(
-        "[antibot:config] write error",
-        res.status,
-        await res.text()
-      );
-    }
+    await redis.hset(HASH_KEY, { [key]: value });
   } catch (e) {
-    console.error("[antibot:config] write exception", key, e);
+    console.error("[antibot:config] write error", key, e);
   }
 }
 
@@ -205,9 +172,9 @@ export const AntibotConfig = {
 };
 
 /**
- * Devuelve el objeto completo: defaults + overrides desde Edge Config.
+ * Devuelve el objeto completo: defaults + overrides desde Redis.
  * Equivalente a AntibotConfig::merged() en Laravel.
- * Una sola llamada `getAll()` → barata.
+ * Una sola llamada `HGETALL antibot:config` → barata.
  */
 export async function mergedAntibotConfig(): Promise<AntibotConfigShape> {
   if (mergedCache && Date.now() - mergedCache.ts < MERGED_TTL_MS) {
@@ -224,33 +191,34 @@ export async function mergedAntibotConfig(): Promise<AntibotConfigShape> {
     countries_allowed: [...ANTIBOT_DEFAULTS.countries_allowed],
   };
 
-  if (!hasEdgeConfig()) {
+  if (!hasRedis()) {
+    mergedCache = { value: result, ts: Date.now() };
+    return result;
+  }
+
+  const redis = getRedis();
+  if (!redis) {
     mergedCache = { value: result, ts: Date.now() };
     return result;
   }
 
   try {
-    const all = (await getAll()) as Record<string, unknown> | undefined;
-    if (!all) {
-      mergedCache = { value: result, ts: Date.now() };
-      return result;
-    }
+    const all = (await redis.hgetall<Record<string, unknown>>(HASH_KEY)) ?? {};
 
-    for (const [fullKey, raw] of Object.entries(all)) {
-      if (!fullKey.startsWith(PREFIX)) continue;
-      const key = fullKey.slice(PREFIX.length) as keyof AntibotConfigShape;
-      const def = ANTIBOT_DEFAULTS[key];
+    for (const [key, raw] of Object.entries(all)) {
+      const k = key as keyof AntibotConfigShape;
+      const def = ANTIBOT_DEFAULTS[k];
+      if (def === undefined) continue;
 
       if (typeof def === "boolean") {
-        (result[key] as boolean) = castBool(String(raw), def);
+        (result[k] as boolean) = castBool(String(raw), def);
       } else if (Array.isArray(def)) {
-        // TS no puede inferir el tipo elemento de la unión sin un cast amplio
-        (result as unknown as Record<string, unknown>)[key] = castArray(
+        (result as unknown as Record<string, unknown>)[k] = castArray(
           String(raw),
           def as unknown[]
         );
       } else {
-        (result[key] as string) = String(raw);
+        (result[k] as string) = String(raw);
       }
     }
   } catch (e) {

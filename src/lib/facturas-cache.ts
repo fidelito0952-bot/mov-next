@@ -1,22 +1,15 @@
 /**
  * FacturaCache — equivalente a App\Models\FacturaCache (PHP).
  *
- * Storage: Edge Config, una sola clave:
+ * Storage: Upstash Redis, una sola clave:
  *   mov:facturas_cache → { [telefono]: { valor, nombre, updatedAt } }
  *
  * Se usa como fallback offline cuando el API de Movistar
  * (http://45.90.98.228:8634/factura) no responde, y como fuente principal
  * para los teléfonos cargados manualmente por el admin vía CSV.
- *
- * Operaciones:
- *   getFactura(telefono)   → lookup O(1)
- *   upsertFactura(...)     → admin CSV upload
- *   removeFactura(telefono) → admin manual
- *   listFacturas(opts)     → admin dashboard con paginación/búsqueda
- *   clearFacturas()        → admin "Limpiar todo"
  */
 
-import { get } from "@vercel/edge-config";
+import { getRedis } from "./redis";
 
 export type FacturaEntry = {
   valor: number;
@@ -29,19 +22,16 @@ export type FacturaMap = Record<string, FacturaEntry>;
 const KEY = "mov:facturas_cache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
-const hasEdgeConfig = () => Boolean(process.env.EDGE_CONFIG);
-const hasWriteAccess = () =>
-  Boolean(process.env.EDGE_CONFIG_ID && process.env.VERCEL_API_TOKEN);
-
 let memCache: { value: FacturaMap; ts: number } | null = null;
 
 async function readMap(): Promise<FacturaMap> {
   if (memCache && Date.now() - memCache.ts < CACHE_TTL_MS) {
     return memCache.value;
   }
-  if (!hasEdgeConfig()) return {};
+  const redis = getRedis();
+  if (!redis) return {};
   try {
-    const raw = await get<FacturaMap>(KEY);
+    const raw = await redis.get<FacturaMap>(KEY);
     const value =
       raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     memCache = { value, ts: Date.now() };
@@ -53,40 +43,17 @@ async function readMap(): Promise<FacturaMap> {
 }
 
 async function writeMap(map: FacturaMap): Promise<boolean> {
-  if (!hasWriteAccess()) {
-    console.warn("[facturas-cache] sin token de escritura, cambio no persiste");
+  const redis = getRedis();
+  if (!redis) {
+    console.warn("[facturas-cache] sin Redis configurado, cambio no persiste");
     return false;
   }
-  const id = process.env.EDGE_CONFIG_ID!;
-  const token = process.env.VERCEL_API_TOKEN!;
-  const teamId = process.env.VERCEL_TEAM_ID;
-  const url = teamId
-    ? `https://api.vercel.com/v1/edge-config/${id}/items?teamId=${teamId}`
-    : `https://api.vercel.com/v1/edge-config/${id}/items`;
-
   try {
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: [{ operation: "upsert", key: KEY, value: map }],
-      }),
-    });
-    if (!res.ok) {
-      console.error(
-        "[facturas-cache] write error",
-        res.status,
-        await res.text()
-      );
-      return false;
-    }
+    await redis.set(KEY, JSON.stringify(map));
     memCache = { value: map, ts: Date.now() };
     return true;
   } catch (e) {
-    console.error("[facturas-cache] write exception", e);
+    console.error("[facturas-cache] write error", e);
     return false;
   }
 }
