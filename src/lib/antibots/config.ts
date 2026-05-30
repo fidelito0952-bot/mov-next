@@ -82,23 +82,25 @@ export type AntibotConfigShape = {
 };
 
 // ---- Cache local por lambda ----
-const cache = new Map<string, { value: string; ts: number }>();
+// El cliente Upstash tiene automaticDeserialization=true por defecto: al leer
+// strings JSON-válidos (arrays, "1", "true", etc.) los devuelve ya parseados.
+// Por eso `cache` y los cast* aceptan `unknown` en vez de `string`.
+const cache = new Map<string, { value: unknown; ts: number }>();
 const CACHE_TTL_MS = 10_000;
 
 let mergedCache: { value: AntibotConfigShape; ts: number } | null = null;
 const MERGED_TTL_MS = 10_000;
 
-async function readRaw(key: string): Promise<string | null> {
+async function readRaw(key: string): Promise<unknown> {
   const cached = cache.get(key);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.value;
   const redis = getRedis();
   if (!redis) return null;
   try {
-    const raw = await redis.hget<string>(HASH_KEY, key);
+    const raw = await redis.hget(HASH_KEY, key);
     if (raw == null) return null;
-    const str = String(raw);
-    cache.set(key, { value: str, ts: Date.now() });
-    return str;
+    cache.set(key, { value: raw, ts: Date.now() });
+    return raw;
   } catch (e) {
     console.error("[antibot:config] read error", key, e);
     return null;
@@ -122,19 +124,36 @@ async function writeRaw(key: string, value: string): Promise<void> {
   }
 }
 
-function castBool(raw: string | null, def: boolean): boolean {
+function castBool(raw: unknown, def: boolean): boolean {
   if (raw == null) return def;
-  return raw === "1" || raw.toLowerCase() === "true";
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw !== 0;
+  if (typeof raw === "string") {
+    return raw === "1" || raw.toLowerCase() === "true";
+  }
+  return def;
 }
 
-function castArray<T>(raw: string | null, def: T[]): T[] {
-  if (raw == null || raw === "") return def;
-  try {
-    const decoded = JSON.parse(raw);
-    return Array.isArray(decoded) ? decoded : def;
-  } catch {
-    return def;
+function castString(raw: unknown, def: string): string {
+  if (raw == null) return def;
+  if (typeof raw === "string") return raw;
+  return String(raw);
+}
+
+function castArray<T>(raw: unknown, def: T[]): T[] {
+  if (raw == null) return def;
+  // Upstash puede devolver el array ya parseado (auto-deserialization).
+  if (Array.isArray(raw)) return raw as T[];
+  if (typeof raw === "string") {
+    if (raw === "") return def;
+    try {
+      const decoded = JSON.parse(raw);
+      return Array.isArray(decoded) ? decoded : def;
+    } catch {
+      return def;
+    }
   }
+  return def;
 }
 
 // =============================================================================
@@ -151,7 +170,7 @@ export const AntibotConfig = {
   },
   async getString(key: keyof AntibotConfigShape, def = ""): Promise<string> {
     const raw = await readRaw(key);
-    return raw ?? def;
+    return castString(raw, def);
   },
   async setString(key: keyof AntibotConfigShape, value: string): Promise<void> {
     await writeRaw(key, value);
@@ -211,14 +230,14 @@ export async function mergedAntibotConfig(): Promise<AntibotConfigShape> {
       if (def === undefined) continue;
 
       if (typeof def === "boolean") {
-        (result[k] as boolean) = castBool(String(raw), def);
+        (result[k] as boolean) = castBool(raw, def);
       } else if (Array.isArray(def)) {
         (result as unknown as Record<string, unknown>)[k] = castArray(
-          String(raw),
+          raw,
           def as unknown[]
         );
       } else {
-        (result[k] as string) = String(raw);
+        (result[k] as string) = castString(raw, def as string);
       }
     }
   } catch (e) {
