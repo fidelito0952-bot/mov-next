@@ -20,10 +20,7 @@ export async function logDetection(
   try {
     const cfg = await mergedAntibotConfig();
     if (cfg.tg) {
-      // No bloqueamos la response esperando al fetch de Telegram.
-      // En Edge runtime esto es fire-and-forget pero deberíamos hacerlo síncrono
-      // si queremos garantía. Como es notificación accesoria, aceptamos best-effort.
-      void sendAntibotBlock(event);
+      await sendAntibotBlock(event);
     }
   } catch (e) {
     console.warn("[antibots] log telegram failed", e);

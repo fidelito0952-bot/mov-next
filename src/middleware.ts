@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runDetector } from "@/lib/antibots/detector";
 import { mergedAntibotConfig } from "@/lib/antibots/config";
+import { recordClick } from "@/lib/clicks";
 
 export const config = {
   matcher: [
@@ -56,6 +57,11 @@ export default async function middleware(req: NextRequest): Promise<Response> {
       path: "/",
       maxAge: 60 * 60, // 1 hora
     });
+    try {
+      await recordClick();
+    } catch (e) {
+      console.error("[clicks] middleware exception", e);
+    }
     return res;
   } catch (e) {
     console.error("[antibots] middleware exception", e);
