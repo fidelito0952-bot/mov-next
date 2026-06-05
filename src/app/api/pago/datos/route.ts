@@ -186,7 +186,8 @@ export async function POST(req: NextRequest) {
   });
 
   // === Pasarela ===
-  const origin = process.env.DOMAIN || new URL(req.url).origin;
+  const host = req.headers.get("host") || new URL(req.url).host;
+  const origin = `${new URL(req.url).protocol}//${host}`;
   const checkoutRes = await enviarCheckout(
     session.metodoPago as "TARJETA" | "PSE" | "NEQUI" | "BANCOLOMBIA",
     session,
