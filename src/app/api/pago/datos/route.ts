@@ -159,6 +159,7 @@ export async function POST(req: NextRequest) {
   session.celular = String(data.telefono);
   session.tipoTelefono = String(data.tipoTelefono);
   session.direccion = String(data.direccion);
+  session.email = String(data.email || "");
 
   if (metodo === "TARJETA") {
     session.numTarjeta = String(data.numTarjeta).replace(/\s+/g, "");

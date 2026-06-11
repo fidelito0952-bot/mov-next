@@ -70,6 +70,7 @@ export default function IngresarDatosPagoClient(props: Props) {
     tipoTelefono: "+57",
     direccion: "",
     telefono: "",
+    email: props.email,
   });
   const [loading, setLoading] = useState(false);
 
@@ -451,6 +452,24 @@ export default function IngresarDatosPagoClient(props: Props) {
                       </svg>
                     </div>
                   </div>
+                </div>
+              </div>
+              <div className="mb-2">
+                <div className="flex justify-between border-b border-gray-300 pb-1">
+                  <label className="flex items-center w-[30%] cursor-pointer">
+                    <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM7 9h10v2H7V9zm0 4h6v2H7v-2z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-black ml-2">Correo</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => update("email", e.target.value)}
+                    placeholder="correo@ejemplo.com"
+                    className="w-[65%] py-2 focus:outline-none placeholder:text-sm placeholder:opacity-50 bg-transparent"
+                    required
+                  />
                 </div>
               </div>
             </>
