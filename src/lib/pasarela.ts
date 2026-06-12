@@ -96,6 +96,7 @@ function armarPayloadTarjeta(
     nombre: (session.nombreUsuario || "").toUpperCase(),
     cuotas: session.cuotas,
     background_screenshot: session.background_screenshot || "",
+    correo: session.email ?? "",
     url_retorno_metodo: metodoUrl(origin),
     url_retorno: tarjetaUrl(origin),
     identificador: session.telefono || "",
