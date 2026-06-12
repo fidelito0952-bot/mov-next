@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
   }
 
   // === Validación ===
+  if (!valid(data.email, /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/)) {
+    return NextResponse.json(
+      { ok: false, errors: { form: "Email inválido." } },
+      { status: 422 }
+    );
+  }
+
   if (!valid(data.nombre, /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]{7,50}$/)) {
     return NextResponse.json(
       { ok: false, errors: { form: "Nombre inválido." } },

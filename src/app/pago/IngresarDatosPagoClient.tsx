@@ -130,6 +130,7 @@ export default function IngresarDatosPagoClient(props: Props) {
   }
 
   function isFormValid(): boolean {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email)) return false;
     if (!validateName(form.nombre)) return false;
     if (!validateDocumento(form.documento)) return false;
     if (!validateDireccion(form.direccion)) return false;
