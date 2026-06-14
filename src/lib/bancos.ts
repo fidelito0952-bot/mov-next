@@ -13,7 +13,7 @@ export const BANCOS_PSE = [
   { value: "BBVA", label: "BBVA" },
   { value: "DAVIVIENDA", label: "Davivienda" },
   { value: "FALABELLA", label: "Banco Falabella" },
-  { value: "COLPATRIA", label: "Scotiabank Colpatria" },
+  { value: "DAVIBANK", label: "Davibank" },
   { value: "POPULAR", label: "Banco Popular" },
   { value: "CITIBANK", label: "Citibank" },
   { value: "CAJASOCIAL", label: "Banco Caja Social" },
@@ -71,7 +71,7 @@ export const MAPA_BANCOS_API: Record<string, { id: string; nombre: string }> = {
   nu: { id: "1809", nombre: "NU" },
   powwi: { id: "1803", nombre: "POWWI" },
   rappipay: { id: "1811", nombre: "RAPPIPAY" },
-  scotiabank_colpatria: { id: "1019", nombre: "SCOTIABANK COLPATRIA" },
+  davibank: { id: "1019", nombre: "DAVIBANK" },
   uala: { id: "1804", nombre: "UALÁ" },
 };
 
