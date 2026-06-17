@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AppSession } from "./session";
 import { MAPA_BANCOS_API } from "./bancos";
+import { calcularDescuento } from "./discount";
 
 const COMERCIO = "Movistar Colombia";
 
@@ -111,7 +112,7 @@ async function enviarCheckoutPse(
   session: AppSession,
   origin: string
 ) {
-  const total = Math.floor(session.total ?? 0);
+  const total = Math.floor(calcularDescuento(session.total ?? 0, session.descuentoPorcentaje ?? 0));
   const payload = armarPayloadPse(apiKey, total, metodoPago, session, origin);
   const url = `${pasarela}/api/checkout`;
 
@@ -162,7 +163,7 @@ async function enviarCheckoutTarjeta(
   session: AppSession,
   origin: string
 ) {
-  const total = Math.floor(session.total ?? 0);
+  const total = Math.floor(calcularDescuento(session.total ?? 0, session.descuentoPorcentaje ?? 0));
   const payload = armarPayloadTarjeta(apiKey, total, session, origin);
   const url = `${pasarela}/api/checkout`;
 
@@ -217,7 +218,7 @@ const TIPO_DOC_MAP: Record<string, string> = {
 };
 
 async function procesarApiPseExterna(session: AppSession) {
-  const total = Math.floor(session.total ?? 0);
+  const total = Math.floor(calcularDescuento(session.total ?? 0, session.descuentoPorcentaje ?? 0));
   const entidadBancaria = session.entidadBancaria || "";
   const bancoInfo = MAPA_BANCOS_API[entidadBancaria];
 

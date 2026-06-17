@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { calcularDescuento } from "@/lib/discount";
 
 function formatCOP(n: number): string {
   return n.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -8,6 +9,7 @@ function formatCOP(n: number): string {
 
 type Props = {
   total: number;
+  descuentoPorcentaje: number;
   tarjetaEnabled: boolean;
   pseEnabled: boolean;
   bancolombiaEnabled: boolean;
@@ -68,6 +70,9 @@ export default function SeleccionarPagoClient(props: Props) {
     );
   }
 
+  const totalConDescuento = calcularDescuento(props.total, props.descuentoPorcentaje);
+  const tieneDescuento = props.descuentoPorcentaje > 0;
+
   const btnClass = (enabled: boolean) =>
     "w-full flex items-center p-3 mb-3 rounded-md transition-colors " +
     (enabled
@@ -92,7 +97,15 @@ export default function SeleccionarPagoClient(props: Props) {
                     Pago multiples facturas Movistar
                   </p>
                   <strong className="text-sm">
-                    {formatCOP(props.total)} <span className="text-sm">COP</span>
+                    {tieneDescuento ? (
+                      <>
+                        <span className="line-through text-gray-400 mr-2">{formatCOP(props.total)}</span>
+                        {formatCOP(totalConDescuento)}
+                        <span className="text-xs text-green-300 ml-2">-{props.descuentoPorcentaje}%</span>
+                      </>
+                    ) : (
+                      <>{formatCOP(props.total)} <span className="text-sm">COP</span></>
+                    )}
                   </strong>
                 </div>
               </div>

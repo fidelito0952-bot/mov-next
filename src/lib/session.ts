@@ -37,6 +37,9 @@ export type AppSession = {
   errors?: Record<string, string>;
   oldInput?: Record<string, unknown>;
 
+  // Descuento
+  descuentoPorcentaje?: number;
+
   // CRUD auth
   cargarAuth?: boolean;
 

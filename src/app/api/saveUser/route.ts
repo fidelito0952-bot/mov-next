@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readSessionFromReq, writeSession } from "@/lib/session";
 import { getClientIp } from "@/lib/ip";
 import { getFactura } from "@/lib/facturas-cache";
+import { Setting } from "@/lib/settings";
 
 type FacturaApi = {
   id?: number | string;
@@ -47,6 +48,10 @@ export async function POST(req: NextRequest) {
   const session = await readSessionFromReq(req);
   const ip = getClientIp(req);
 
+  // === 0. Leer descuento ===
+  const descuentoStr = await Setting.getStringAsync("descuento_porcentaje", "0");
+  const descuentoPorcentaje = parseInt(descuentoStr, 10) || 0;
+
   // === 1. Buscar primero en FacturaCache (Edge Config) ===
   const cached = await getFactura(numero);
   if (cached && cached.valor > 0) {
@@ -54,6 +59,7 @@ export async function POST(req: NextRequest) {
       id: randInt(100000, 999999),
       facturaId: "FC-" + uniqId(),
       total: cached.valor,
+      descuentoPorcentaje,
       factura_documento: "FAC-" + randInt(10000000, 99999999),
       nombre: cached.nombre || "Cliente",
       expiracion: new Date(Date.now() + 5 * 86400_000)
@@ -141,6 +147,7 @@ export async function POST(req: NextRequest) {
     id: Number(factura.id) || randInt(100000, 999999),
     facturaId: String(factura.facturaId || "FC-" + uniqId()),
     total,
+    descuentoPorcentaje,
     factura_documento: String(factura.documento || "FAC-" + randInt(10000000, 99999999)),
     nombre: String(factura.extra14 || "Cliente"),
     expiracion: String(

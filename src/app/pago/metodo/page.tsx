@@ -16,6 +16,7 @@ export default async function PagoMetodoPage() {
   return (
     <SeleccionarPagoClient
       total={session.total!}
+      descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
       tarjetaEnabled={Setting.getBool("tarjeta_enabled", true)}
       pseEnabled={Setting.getBool("pse_enabled", true)}
       bancolombiaEnabled={Setting.getBool("bancolombia_enabled", false)}

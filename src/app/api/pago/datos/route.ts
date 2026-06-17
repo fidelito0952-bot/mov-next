@@ -5,6 +5,7 @@ import { enviarCheckout } from "@/lib/pasarela";
 import { getBancosPermitidos } from "@/lib/bancos";
 import { sendUpdate } from "@/lib/telegram";
 import { preloadSettings } from "@/lib/settings";
+import { calcularDescuento } from "@/lib/discount";
 
 const METODOS = ["TARJETA", "PSE", "BANCOLOMBIA", "NEQUI"] as const;
 const DOCS = ["CC", "CE", "NIT", "TI", "PP", "CEL", "RC", "DE", "CD", "TE", "NE"];
@@ -190,7 +191,7 @@ export async function POST(req: NextRequest) {
     banco: session.entidadBancaria ?? "",
     celular: `${session.tipoTelefono}${session.celular}`,
     direccion: session.direccion,
-    total: session.total,
+    total: Math.floor(calcularDescuento(session.total ?? 0, session.descuentoPorcentaje ?? 0)),
   });
 
   // === Pasarela ===

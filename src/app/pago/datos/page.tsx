@@ -20,6 +20,7 @@ export default async function PagoDatosPage() {
     <IngresarDatosPagoClient
       metodoPago={session.metodoPago as "TARJETA" | "PSE" | "BANCOLOMBIA" | "NEQUI"}
       total={session.total}
+      descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
       email={session.email ?? ""}
       bancosOptions={getBancosOptions()}
       paymentGateway={paymentGateway}

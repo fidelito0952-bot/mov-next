@@ -15,6 +15,7 @@ export default async function FacturaResumenPage() {
       id={String(session.id ?? "")}
       facturaId={session.facturaId ?? ""}
       total={session.total!}
+      descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
       factura_documento={session.factura_documento ?? ""}
       nombre={session.nombre ?? ""}
       expiracion={session.expiracion ?? ""}

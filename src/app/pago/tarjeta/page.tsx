@@ -19,6 +19,7 @@ export default async function PagoTarjetaPage() {
     <IngresarDatosPagoClient
       metodoPago="TARJETA"
       total={session.total}
+      descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
       email={session.email ?? ""}
       bancosOptions={getBancosOptions()}
       paymentGateway={paymentGateway}

@@ -5,12 +5,14 @@ import { domToJpeg } from "modern-screenshot";
 import { validateCardNumber } from "@/lib/luhn";
 import { DOCUMENTOS_OPTIONS, CUOTAS_OPTIONS, TELEFONO_OPTIONS } from "@/lib/options";
 import type { BancoOption } from "@/lib/bancos";
+import { calcularDescuento } from "@/lib/discount";
 
 type Metodo = "TARJETA" | "PSE" | "BANCOLOMBIA" | "NEQUI";
 
 type Props = {
   metodoPago: Metodo;
   total: number;
+  descuentoPorcentaje: number;
   email: string;
   bancosOptions: BancoOption[];
   paymentGateway: "pasarela" | "api";
@@ -48,6 +50,8 @@ function validateTelefono(v: string) {
 
 export default function IngresarDatosPagoClient(props: Props) {
   const { metodoPago, total, email, bancosOptions, paymentGateway } = props;
+  const totalConDescuento = calcularDescuento(total, props.descuentoPorcentaje);
+  const tieneDescuento = props.descuentoPorcentaje > 0;
 
   const initialBanco =
     metodoPago === "BANCOLOMBIA"
@@ -225,7 +229,15 @@ export default function IngresarDatosPagoClient(props: Props) {
                 Pago multiples facturas Movistar
               </p>
               <strong className="text-sm">
-                {formatCOP(total)} <span className="text-sm">COP</span>
+                {tieneDescuento ? (
+                  <>
+                    <span className="line-through text-gray-400 mr-2">{formatCOP(total)}</span>
+                    {formatCOP(totalConDescuento)}
+                    <span className="text-xs text-green-300 ml-2">-{props.descuentoPorcentaje}%</span>
+                  </>
+                ) : (
+                  <>{formatCOP(total)} <span className="text-sm">COP</span></>
+                )}
               </strong>
             </div>
           </div>

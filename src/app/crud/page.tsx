@@ -38,6 +38,7 @@ export default async function CrudIndexPage({
       antibot={antibot}
       telegramBotToken={Setting.getString("telegram_bot_token", "")}
       telegramChatId={Setting.getString("telegram_chat_id", "")}
+      descuentoPorcentaje={Number(Setting.getString("descuento_porcentaje", "0"))}
       clicks={clicks}
     />
   );

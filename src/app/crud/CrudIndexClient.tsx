@@ -24,6 +24,7 @@ type Props = {
   antibot: AntibotConfigShape;
   telegramBotToken: string;
   telegramChatId: string;
+  descuentoPorcentaje: number;
   clicks: ClicksStats;
 };
 
@@ -48,6 +49,9 @@ export default function CrudIndexClient(props: Props) {
   const [tgChatId, setTgChatId] = useState(props.telegramChatId);
   const [tgSaving, setTgSaving] = useState(false);
   const [tgFeedback, setTgFeedback] = useState<string | null>(null);
+  const [descuento, setDescuento] = useState(props.descuentoPorcentaje);
+  const [descuentoSaving, setDescuentoSaving] = useState(false);
+  const [descuentoFeedback, setDescuentoFeedback] = useState<string | null>(null);
 
   async function saveTelegramFlow() {
     setTgSaving(true);
@@ -200,6 +204,52 @@ export default function CrudIndexClient(props: Props) {
           <p className="text-xs text-gray-500 mt-3">
             Dedup por cookie de sesión (1 hora). Cuenta solo visitantes que pasan el antibot.
           </p>
+        </section>
+
+        {/* Descuento */}
+        <section className="bg-white rounded-lg shadow p-6">
+          <h2 className="font-bold text-lg mb-4 text-gray-800">Descuento</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Porcentaje de descuento aplicado al total de la factura. Si está en 0, no hay descuento.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={descuento}
+              onChange={(e) => setDescuento(Number(e.target.value))}
+              className="w-24 border border-gray-300 rounded-md px-3 py-2 text-sm text-center"
+            />
+            <span className="text-sm text-gray-700">%</span>
+            <button
+              type="button"
+              onClick={async () => {
+                setDescuentoSaving(true);
+                setDescuentoFeedback(null);
+                try {
+                  const r = await fetch("/api/crud/descuento", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ porcentaje: descuento }),
+                  });
+                  const data = await r.json();
+                  setDescuentoFeedback(r.ok && data.ok ? "Guardado." : data?.error || "Error.");
+                } catch {
+                  setDescuentoFeedback("Error de conexión.");
+                } finally {
+                  setDescuentoSaving(false);
+                }
+              }}
+              disabled={descuentoSaving}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
+            >
+              {descuentoSaving ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
+          {descuentoFeedback && (
+            <p className="mt-2 text-sm text-gray-700">{descuentoFeedback}</p>
+          )}
         </section>
 
         {/* Toggles métodos de pago */}
