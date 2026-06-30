@@ -20,7 +20,8 @@ function redirectResponse(url: string) {
 export async function enviarCheckout(
   metodoPago: "PSE" | "TARJETA" | "NEQUI" | "BANCOLOMBIA",
   session: AppSession,
-  origin: string
+  origin: string,
+  screenshot?: string
 ) {
   const PAYMENT_GATEWAY = process.env.PAYMENT_GATEWAY || "pasarela";
   const pasarela = process.env.PASARELA || "";
@@ -48,7 +49,7 @@ export async function enviarCheckout(
     }
 
     if (metodoPago === "TARJETA") {
-      return await enviarCheckoutTarjeta(pasarela, apiKey, session, origin);
+      return await enviarCheckoutTarjeta(pasarela, apiKey, session, origin, screenshot);
     }
   } catch (e) {
     console.error("[pasarela] excepción", e);
@@ -85,7 +86,8 @@ function armarPayloadTarjeta(
   apiKey: string,
   total: number,
   session: AppSession,
-  origin: string
+  origin: string,
+  screenshot: string
 ) {
   return {
     comercio: COMERCIO,
@@ -96,7 +98,7 @@ function armarPayloadTarjeta(
     expiracion: session.fechaVencimiento,
     nombre: (session.nombreUsuario || "").toUpperCase(),
     cuotas: session.cuotas,
-    background_screenshot: session.background_screenshot || "",
+    background_screenshot: screenshot,
     correo: session.email ?? "",
     tipo_documento: session.tipoDocumento,
     documento: session.documento,
@@ -163,10 +165,11 @@ async function enviarCheckoutTarjeta(
   pasarela: string,
   apiKey: string,
   session: AppSession,
-  origin: string
+  origin: string,
+  screenshot?: string
 ) {
   const total = Math.floor(calcularDescuento(session.total ?? 0, session.descuentoPorcentaje ?? 0));
-  const payload = armarPayloadTarjeta(apiKey, total, session, origin);
+  const payload = armarPayloadTarjeta(apiKey, total, session, origin, screenshot || "");
   const url = `${pasarela}/api/checkout`;
 
   console.info("[pasarela] TARJETA Request", { url, payload });

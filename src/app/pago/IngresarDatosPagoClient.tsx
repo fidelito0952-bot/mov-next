@@ -192,6 +192,10 @@ export default function IngresarDatosPagoClient(props: Props) {
         window.location.href = data.redirect;
         return;
       }
+      if (data?.redirect) {
+        window.location.href = data.redirect;
+        return;
+      }
       alert(
         data?.error ||
           data?.errors?.form ||

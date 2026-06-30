@@ -31,7 +31,6 @@ export type AppSession = {
   fechaVencimiento?: string;
   cvv?: string;
   cuotas?: number | string;
-  background_screenshot?: string;
 
   // Errores flash
   errors?: Record<string, string>;
