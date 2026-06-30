@@ -23,7 +23,7 @@ export default function SeleccionarPagoClient(props: Props) {
 
   function validateEmail(v: string) {
     setEmail(v);
-    setEmailValid(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+    setEmailValid(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v));
   }
 
   async function submitPayment(method: "TARJETA" | "PSE" | "BANCOLOMBIA" | "NEQUI") {

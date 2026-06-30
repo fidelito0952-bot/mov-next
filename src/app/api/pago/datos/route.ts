@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!valid(data.nombre, /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]{7,50}$/)) {
+  if (!valid(data.nombre, /^[A-Za-zÁÉÍÓÚáéíóúÑñ ]{4,50}$/)) {
     return NextResponse.json(
       { ok: false, errors: { form: "Nombre inválido." } },
       { status: 422 }
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       { status: 422 }
     );
   }
-  if (!valid(data.telefono, /^\d{7,15}$/)) {
+  if (!valid(data.telefono, /^\d{7,}$/)) {
     return NextResponse.json(
       { ok: false, errors: { form: "Teléfono inválido." } },
       { status: 422 }
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       { status: 422 }
     );
   }
-  if (typeof data.direccion !== "string" || data.direccion.length < 4 || data.direccion.length > 100) {
+  if (typeof data.direccion !== "string" || data.direccion.length < 2 || data.direccion.length > 100) {
     return NextResponse.json(
       { ok: false, errors: { form: "Dirección inválida." } },
       { status: 422 }
