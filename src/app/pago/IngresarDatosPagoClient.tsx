@@ -13,7 +13,6 @@ type Props = {
   metodoPago: Metodo;
   total: number;
   descuentoPorcentaje: number;
-  email: string;
   bancosOptions: BancoOption[];
   paymentGateway: "pasarela" | "api";
 };
@@ -49,7 +48,7 @@ function validateTelefono(v: string) {
 }
 
 export default function IngresarDatosPagoClient(props: Props) {
-  const { metodoPago, total, email, bancosOptions, paymentGateway } = props;
+  const { metodoPago, total, bancosOptions, paymentGateway } = props;
   const totalConDescuento = calcularDescuento(total, props.descuentoPorcentaje);
   const tieneDescuento = props.descuentoPorcentaje > 0;
 
@@ -74,7 +73,7 @@ export default function IngresarDatosPagoClient(props: Props) {
     tipoTelefono: "+57",
     direccion: "",
     telefono: "",
-    email: props.email,
+    email: "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -259,7 +258,7 @@ export default function IngresarDatosPagoClient(props: Props) {
               clipRule="evenodd"
             />
           </svg>
-          <h3 className="text-sm italic">{email}</h3>
+          <h3 className="text-sm italic">{form.email}</h3>
           <p className="text-sm">Cerrar sesión</p>
         </div>
       </header>

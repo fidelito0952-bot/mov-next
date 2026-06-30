@@ -23,7 +23,6 @@ export default async function PagoPsePage() {
       metodoPago={metodo}
       total={session.total}
       descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
-      email={session.email ?? ""}
       bancosOptions={getBancosOptions()}
       paymentGateway={paymentGateway}
     />

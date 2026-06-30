@@ -20,7 +20,6 @@ export default async function PagoTarjetaPage() {
       metodoPago="TARJETA"
       total={session.total}
       descuentoPorcentaje={session.descuentoPorcentaje ?? 0}
-      email={session.email ?? ""}
       bancosOptions={getBancosOptions()}
       paymentGateway={paymentGateway}
     />
