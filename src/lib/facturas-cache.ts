@@ -8,7 +8,8 @@
  * eliminando el límite de tamaño de un solo key y permitiendo escalar a
  * cientos de miles de facturas sin timeouts.
  *
- * Migración automática desde el formato antiguo (un solo key SET con JSON).
+ * Migración automática desde el formato antiguo (SET/GET con JSON único).
+ * Usa una key temporal + RENAME atómico para no perder datos si falla.
  */
 
 import { getRedis } from "./redis";
@@ -22,7 +23,9 @@ export type FacturaEntry = {
 export type FacturaMap = Record<string, FacturaEntry>;
 
 const KEY = "mov:facturas_cache";
+const MIGRATE_TMP = "mov:facturas_cache_tmp";
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const MIGRATE_BATCH = 500;
 
 let memCache: { value: FacturaMap; ts: number } | null = null;
 
@@ -35,14 +38,15 @@ async function readMap(): Promise<FacturaMap> {
   if (!redis) return {};
 
   try {
-    // Intentar formato HASH (formato actual después de migración)
+    // Formato HASH (actual)
     const hash = await redis
       .hgetall<Record<string, unknown>>(KEY)
       .catch(() => null);
     if (hash && typeof hash === "object" && !Array.isArray(hash)) {
       const map: FacturaMap = {};
       for (const [tel, raw] of Object.entries(hash)) {
-        if (raw && typeof raw === "object") {
+        if (tel === "_migrated") continue;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
           map[tel] = raw as FacturaEntry;
         }
       }
@@ -52,32 +56,44 @@ async function readMap(): Promise<FacturaMap> {
       }
     }
 
-    // Fallback: formato antiguo (SET/GET con un solo JSON) — migrar en caliente
+    // Formato antiguo (SET/GET con JSON único) — migrar a HASH
     const oldRaw = await redis.get<string>(KEY).catch(() => null);
-    if (oldRaw && typeof oldRaw === "string" && oldRaw.startsWith("{")) {
-      const map: FacturaMap = {};
-      try {
-        const parsed = JSON.parse(oldRaw);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          Object.assign(map, parsed);
+    if (!oldRaw || typeof oldRaw !== "string") return {};
+
+    const map: FacturaMap = {};
+    try {
+      const parsed = JSON.parse(oldRaw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        Object.assign(map, parsed);
+      }
+    } catch {
+      return {};
+    }
+    if (Object.keys(map).length === 0) return {};
+
+    // Migrar a HASH: escribe en temp key, luego RENAME atómico
+    try {
+      await redis.del(MIGRATE_TMP).catch(() => {});
+
+      const entries = Object.entries(map);
+      for (let i = 0; i < entries.length; i += MIGRATE_BATCH) {
+        const batch = entries.slice(i, i + MIGRATE_BATCH);
+        const p = redis.pipeline();
+        for (const [tel, entry] of batch) {
+          p.hset(MIGRATE_TMP, { [tel]: entry });
         }
-      } catch {
-        /* ignorar parseo inválido */
+        await p.exec();
       }
 
-      if (Object.keys(map).length > 0) {
-        const pipeline = redis.pipeline();
-        for (const [tel, entry] of Object.entries(map)) {
-          pipeline.hset(KEY, { [tel]: entry });
-        }
-        await pipeline.exec();
-      }
-
-      memCache = { value: map, ts: Date.now() };
-      return map;
+      await redis.hset(MIGRATE_TMP, { _migrated: "1" });
+      await redis.rename(MIGRATE_TMP, KEY);
+    } catch (e) {
+      console.error("[facturas-cache] migración falló, datos viejos intactos", e);
+      await redis.del(MIGRATE_TMP).catch(() => {});
     }
 
-    return {};
+    memCache = { value: map, ts: Date.now() };
+    return map;
   } catch (e) {
     console.error("[facturas-cache] read error", e);
     return {};
