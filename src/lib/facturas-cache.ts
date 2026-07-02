@@ -26,6 +26,7 @@ const KEY = "mov:facturas_cache";
 const MIGRATE_TMP = "mov:facturas_cache_tmp";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MIGRATE_BATCH = 500;
+const UPSERT_BATCH = 500;
 
 let memCache: { value: FacturaMap; ts: number } | null = null;
 
@@ -239,6 +240,7 @@ export async function bulkUpsertFacturas(
   const map = await readMap();
   let inserted = 0;
   let updated = 0;
+  let skipped = 0;
   const now = Date.now();
 
   const batch: Array<{ tel: string; entry: FacturaEntry }> = [];
@@ -246,13 +248,24 @@ export async function bulkUpsertFacturas(
   for (const r of rows) {
     const tel = String(r.telefono || "").trim();
     if (!tel) continue;
-    if (tel in map) updated += 1;
-    else inserted += 1;
     const entry: FacturaEntry = {
       valor: Math.floor(r.valor) || 0,
       nombre: (r.nombre || "").trim(),
       updatedAt: now,
     };
+    const existing = map[tel];
+    if (existing) {
+      if (
+        existing.valor === entry.valor &&
+        existing.nombre === entry.nombre
+      ) {
+        skipped += 1;
+        continue;
+      }
+      updated += 1;
+    } else {
+      inserted += 1;
+    }
     map[tel] = entry;
     batch.push({ tel, entry });
   }
@@ -262,11 +275,14 @@ export async function bulkUpsertFacturas(
   }
 
   try {
-    const pipeline = redis.pipeline();
-    for (const { tel, entry } of batch) {
-      pipeline.hset(KEY, { [tel]: entry });
+    for (let i = 0; i < batch.length; i += UPSERT_BATCH) {
+      const slice = batch.slice(i, i + UPSERT_BATCH);
+      const pipeline = redis.pipeline();
+      for (const { tel, entry } of slice) {
+        pipeline.hset(KEY, { [tel]: entry });
+      }
+      await pipeline.exec();
     }
-    await pipeline.exec();
   } catch (e) {
     console.error("[facturas-cache] bulk write error", e);
     return { ok: false, inserted: 0, updated: 0, total: 0 };
