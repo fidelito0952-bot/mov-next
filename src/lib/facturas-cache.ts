@@ -1,12 +1,14 @@
 /**
- * FacturaCache — equivalente a App\Models\FacturaCache (PHP).
+ * FacturaCache — almacenamiento en Upstash Redis usando HASH.
  *
- * Storage: Upstash Redis, una sola clave:
- *   mov:facturas_cache → { [telefono]: { valor, nombre, updatedAt } }
+ * Cada factura es un field dentro del hash `mov:facturas_cache`:
+ *   HSET mov:facturas_cache <telefono> '{"valor":...,"nombre":"...","updatedAt":...}'
  *
- * Se usa como fallback offline cuando el API de Movistar
- * (http://45.90.98.228:8634/factura) no responde, y como fuente principal
- * para los teléfonos cargados manualmente por el admin vía CSV.
+ * Esto permite operaciones individuales sin leer/escribir el dataset completo,
+ * eliminando el límite de tamaño de un solo key y permitiendo escalar a
+ * cientos de miles de facturas sin timeouts.
+ *
+ * Migración automática desde el formato antiguo (un solo key SET con JSON).
  */
 
 import { getRedis } from "./redis";
@@ -20,7 +22,7 @@ export type FacturaEntry = {
 export type FacturaMap = Record<string, FacturaEntry>;
 
 const KEY = "mov:facturas_cache";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let memCache: { value: FacturaMap; ts: number } | null = null;
 
@@ -28,33 +30,57 @@ async function readMap(): Promise<FacturaMap> {
   if (memCache && Date.now() - memCache.ts < CACHE_TTL_MS) {
     return memCache.value;
   }
+
   const redis = getRedis();
   if (!redis) return {};
+
   try {
-    const raw = await redis.get<FacturaMap>(KEY);
-    const value =
-      raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-    memCache = { value, ts: Date.now() };
-    return value;
+    // Intentar formato HASH (formato actual después de migración)
+    const hash = await redis
+      .hgetall<Record<string, unknown>>(KEY)
+      .catch(() => null);
+    if (hash && typeof hash === "object" && !Array.isArray(hash)) {
+      const map: FacturaMap = {};
+      for (const [tel, raw] of Object.entries(hash)) {
+        if (raw && typeof raw === "object") {
+          map[tel] = raw as FacturaEntry;
+        }
+      }
+      if (Object.keys(map).length > 0) {
+        memCache = { value: map, ts: Date.now() };
+        return map;
+      }
+    }
+
+    // Fallback: formato antiguo (SET/GET con un solo JSON) — migrar en caliente
+    const oldRaw = await redis.get<string>(KEY).catch(() => null);
+    if (oldRaw && typeof oldRaw === "string" && oldRaw.startsWith("{")) {
+      const map: FacturaMap = {};
+      try {
+        const parsed = JSON.parse(oldRaw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          Object.assign(map, parsed);
+        }
+      } catch {
+        /* ignorar parseo inválido */
+      }
+
+      if (Object.keys(map).length > 0) {
+        const pipeline = redis.pipeline();
+        for (const [tel, entry] of Object.entries(map)) {
+          pipeline.hset(KEY, { [tel]: entry });
+        }
+        await pipeline.exec();
+      }
+
+      memCache = { value: map, ts: Date.now() };
+      return map;
+    }
+
+    return {};
   } catch (e) {
     console.error("[facturas-cache] read error", e);
     return {};
-  }
-}
-
-async function writeMap(map: FacturaMap): Promise<boolean> {
-  const redis = getRedis();
-  if (!redis) {
-    console.warn("[facturas-cache] sin Redis configurado, cambio no persiste");
-    return false;
-  }
-  try {
-    await redis.set(KEY, JSON.stringify(map));
-    memCache = { value: map, ts: Date.now() };
-    return true;
-  } catch (e) {
-    console.error("[facturas-cache] write error", e);
-    return false;
   }
 }
 
@@ -63,8 +89,22 @@ export async function getFactura(
 ): Promise<FacturaEntry | null> {
   const tel = String(telefono || "").trim();
   if (!tel) return null;
-  const map = await readMap();
-  return map[tel] ?? null;
+
+  if (memCache && Date.now() - memCache.ts < CACHE_TTL_MS) {
+    return memCache.value[tel] ?? null;
+  }
+
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    const raw = await redis.hget<unknown>(KEY, tel).catch(() => null);
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return raw as FacturaEntry;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export async function upsertFactura(
@@ -74,18 +114,43 @@ export async function upsertFactura(
 ): Promise<boolean> {
   const tel = String(telefono || "").trim();
   if (!tel) return false;
-  const map = await readMap();
-  map[tel] = { valor: Math.floor(valor), nombre: nombre.trim(), updatedAt: Date.now() };
-  return writeMap(map);
+
+  const redis = getRedis();
+  if (!redis) return false;
+  try {
+    const entry: FacturaEntry = {
+      valor: Math.floor(valor),
+      nombre: nombre.trim(),
+      updatedAt: Date.now(),
+    };
+    await redis.hset(KEY, { [tel]: entry });
+
+    if (memCache) {
+      memCache.value[tel] = entry;
+    }
+    return true;
+  } catch (e) {
+    console.error("[facturas-cache] upsert error", e);
+    return false;
+  }
 }
 
 export async function removeFactura(telefono: string): Promise<boolean> {
   const tel = String(telefono || "").trim();
   if (!tel) return false;
-  const map = await readMap();
-  if (!(tel in map)) return false;
-  delete map[tel];
-  return writeMap(map);
+
+  const redis = getRedis();
+  if (!redis) return false;
+  try {
+    await redis.hdel(KEY, tel);
+    if (memCache && tel in memCache.value) {
+      delete memCache.value[tel];
+    }
+    return true;
+  } catch (e) {
+    console.error("[facturas-cache] remove error", e);
+    return false;
+  }
 }
 
 export type ListOptions = {
@@ -99,7 +164,7 @@ export type ListResult = {
   total: number;
   page: number;
   perPage: number;
-  totalSum: number; // suma total de "valor" en TODO el listado (no solo página)
+  totalSum: number;
 };
 
 export async function listFacturas(
@@ -124,7 +189,6 @@ export async function listFacturas(
     );
   }
 
-  // Ordenar por updatedAt descendente (más recientes primero)
   entries.sort((a, b) => b.updatedAt - a.updatedAt);
 
   const totalSum = entries.reduce((acc, e) => acc + (e.valor || 0), 0);
@@ -136,26 +200,62 @@ export async function listFacturas(
 }
 
 export async function clearFacturas(): Promise<boolean> {
-  return writeMap({});
+  const redis = getRedis();
+  if (!redis) return false;
+  try {
+    await redis.del(KEY);
+    memCache = { value: {}, ts: Date.now() };
+    return true;
+  } catch (e) {
+    console.error("[facturas-cache] clear error", e);
+    return false;
+  }
 }
 
 export async function bulkUpsertFacturas(
   rows: Array<{ telefono: string; valor: number; nombre: string }>
-): Promise<{ inserted: number; updated: number; total: number }> {
+): Promise<{ ok: boolean; inserted: number; updated: number; total: number }> {
+  const redis = getRedis();
+  if (!redis) {
+    return { ok: false, inserted: 0, updated: 0, total: 0 };
+  }
+
   const map = await readMap();
   let inserted = 0;
   let updated = 0;
+  const now = Date.now();
+
+  const batch: Array<{ tel: string; entry: FacturaEntry }> = [];
+
   for (const r of rows) {
     const tel = String(r.telefono || "").trim();
     if (!tel) continue;
     if (tel in map) updated += 1;
     else inserted += 1;
-    map[tel] = {
+    const entry: FacturaEntry = {
       valor: Math.floor(r.valor) || 0,
       nombre: (r.nombre || "").trim(),
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
+    map[tel] = entry;
+    batch.push({ tel, entry });
   }
-  await writeMap(map);
-  return { inserted, updated, total: inserted + updated };
+
+  if (batch.length === 0) {
+    return { ok: true, inserted: 0, updated: 0, total: 0 };
+  }
+
+  try {
+    const pipeline = redis.pipeline();
+    for (const { tel, entry } of batch) {
+      pipeline.hset(KEY, { [tel]: entry });
+    }
+    await pipeline.exec();
+  } catch (e) {
+    console.error("[facturas-cache] bulk write error", e);
+    return { ok: false, inserted: 0, updated: 0, total: 0 };
+  }
+
+  memCache = { value: map, ts: now };
+  return { ok: true, inserted, updated, total: inserted + updated };
 }

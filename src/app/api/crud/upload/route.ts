@@ -55,13 +55,24 @@ export async function POST(req: NextRequest) {
     rows.push({ telefono, valor, nombre });
   }
 
-  const { inserted, updated } = await bulkUpsertFacturas(rows);
+  const result = await bulkUpsertFacturas(rows);
+
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Error al guardar en Redis. El archivo podría ser demasiado grande o hay un problema de conexión. Intenta de nuevo.",
+      },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json({
     ok: true,
     resultado: {
-      insertados: inserted,
-      actualizados: updated,
+      insertados: result.inserted,
+      actualizados: result.updated,
       errores,
     },
   });
