@@ -97,26 +97,74 @@ export default function CrudIndexClient(props: Props) {
     });
   }
 
+  function parseLinea(raw: string): { telefono: string; valor: number; nombre: string } | null {
+    const linea = raw.trim();
+    if (!linea) return null;
+    const cols = linea.split(",").map((c) => c.trim());
+    if (cols.length < 2) return null;
+    const telefono = cols[0].replace(/\D/g, "");
+    const valor = parseInt(cols[1].replace(/\D/g, ""), 10) || 0;
+    const nombre = cols[2] ?? "";
+    if (!telefono || valor <= 0) return null;
+    return { telefono, valor, nombre };
+  }
+
   async function uploadFile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+    const input = (e.target as HTMLFormElement).querySelector<HTMLInputElement>('input[type="file"]');
+    const file = input?.files?.[0];
+    if (!file) return;
+
     setUploading(true);
     setUploadError(null);
     setUploadResult(null);
+
     try {
-      const r = await fetch("/api/crud/upload", { method: "POST", body: fd });
-      const data = await r.json();
-      if (!r.ok || !data.ok) {
-        setUploadError(
-          data?.errors?.archivo || data?.error || "Error al cargar archivo."
-        );
-      } else {
-        const { insertados, actualizados, errores } = data.resultado;
-        setUploadResult(
-          `Insertados: ${insertados} · Actualizados: ${actualizados} · Errores: ${errores}`
-        );
-        setTimeout(() => window.location.reload(), 1500);
+      const text = await file.text();
+      const rawLines = text.split(/\r\n|\r|\n/);
+      const allRows: Array<{ telefono: string; valor: number; nombre: string }> = [];
+      let parseErrors = 0;
+
+      for (const l of rawLines) {
+        const row = parseLinea(l);
+        if (!row) { parseErrors++; continue; }
+        allRows.push(row);
       }
+
+      if (allRows.length === 0) {
+        setUploadError("No se encontraron filas válidas en el archivo.");
+        setUploading(false);
+        return;
+      }
+
+      const BATCH = 5000;
+      let totalInsertados = 0;
+      let totalActualizados = 0;
+      const totalBatches = Math.ceil(allRows.length / BATCH);
+
+      for (let i = 0; i < allRows.length; i += BATCH) {
+        const batch = allRows.slice(i, i + BATCH);
+        const r = await fetch("/api/crud/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: batch }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+          setUploadError(
+            data?.error || `Error al procesar lote ${Math.floor(i / BATCH) + 1}/${totalBatches}.`
+          );
+          setUploading(false);
+          return;
+        }
+        totalInsertados += data.resultado.insertados;
+        totalActualizados += data.resultado.actualizados;
+      }
+
+      setUploadResult(
+        `Insertados: ${totalInsertados} · Actualizados: ${totalActualizados} · Errores: ${parseErrors}`
+      );
+      setTimeout(() => window.location.reload(), 1500);
     } catch {
       setUploadError("Error de conexión.");
     } finally {

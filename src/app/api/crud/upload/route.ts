@@ -2,68 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { readSessionFromReq } from "@/lib/session";
 import { bulkUpsertFacturas } from "@/lib/facturas-cache";
 
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
   const session = await readSessionFromReq(req);
   if (!session.cargarAuth) {
     return NextResponse.json({ ok: false, error: "No autorizado." }, { status: 401 });
   }
 
-  const form = await req.formData().catch(() => null);
-  const file = form?.get("archivo");
-  if (!(file instanceof File)) {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
     return NextResponse.json(
-      { ok: false, errors: { archivo: "Debes seleccionar un archivo." } },
-      { status: 422 }
-    );
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    return NextResponse.json(
-      { ok: false, errors: { archivo: "El archivo supera el tamaño máximo (10 MB)." } },
+      { ok: false, error: "Body inválido. Debe ser JSON." },
       { status: 422 }
     );
   }
 
-  const name = file.name.toLowerCase();
-  if (!name.endsWith(".txt")) {
+  const parsed = body as { rows?: Array<{ telefono: string; valor: number; nombre: string }> };
+  if (!parsed.rows || !Array.isArray(parsed.rows)) {
     return NextResponse.json(
-      { ok: false, errors: { archivo: "El archivo debe ser un .txt" } },
+      { ok: false, error: "Se requiere un arreglo 'rows' con {telefono, valor, nombre}." },
       { status: 422 }
     );
   }
 
-  const text = await file.text();
-  const lineas = text.split(/\r\n|\r|\n/);
-
-  const rows: Array<{ telefono: string; valor: number; nombre: string }> = [];
-  let errores = 0;
-
-  for (const lRaw of lineas) {
-    const linea = lRaw.trim();
-    if (!linea) continue;
-    const cols = linea.split(",").map((c) => c.trim());
-    if (cols.length < 2) {
-      errores++;
-      continue;
-    }
-    const telefono = cols[0].replace(/\D/g, "");
-    const valor = parseInt(cols[1].replace(/\D/g, ""), 10) || 0;
-    const nombre = cols[2] ?? "";
-    if (!telefono || valor <= 0) {
-      errores++;
-      continue;
-    }
-    rows.push({ telefono, valor, nombre });
+  if (parsed.rows.length > 10000) {
+    return NextResponse.json(
+      { ok: false, error: "Demasiadas filas en un solo lote (máx 10,000)." },
+      { status: 422 }
+    );
   }
 
-  const result = await bulkUpsertFacturas(rows);
+  const result = await bulkUpsertFacturas(parsed.rows);
 
   if (!result.ok) {
     return NextResponse.json(
-      {
-        ok: false,
-        error:
-          "Error al guardar en Redis. El archivo podría ser demasiado grande o hay un problema de conexión. Intenta de nuevo.",
-      },
+      { ok: false, error: "Error al guardar en Redis. Intenta de nuevo." },
       { status: 500 }
     );
   }
@@ -73,7 +49,6 @@ export async function POST(req: NextRequest) {
     resultado: {
       insertados: result.inserted,
       actualizados: result.updated,
-      errores,
     },
   });
 }
