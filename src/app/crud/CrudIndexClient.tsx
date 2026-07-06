@@ -44,7 +44,7 @@ export default function CrudIndexClient(props: Props) {
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [clearing, setClearing] = useState(false);
+  
   const [tgBotToken, setTgBotToken] = useState(props.telegramBotToken);
   const [tgChatId, setTgChatId] = useState(props.telegramChatId);
   const [tgSaving, setTgSaving] = useState(false);
@@ -169,17 +169,6 @@ export default function CrudIndexClient(props: Props) {
       setUploadError("Error de conexión.");
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function clearAll() {
-    if (!confirm("¿Borrar TODAS las facturas en caché?")) return;
-    setClearing(true);
-    try {
-      const r = await fetch("/api/crud/clear", { method: "POST" });
-      if (r.ok) window.location.reload();
-    } finally {
-      setClearing(false);
     }
   }
 
@@ -360,14 +349,6 @@ export default function CrudIndexClient(props: Props) {
               className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
             >
               {uploading ? "Subiendo..." : "Cargar"}
-            </button>
-            <button
-              type="button"
-              onClick={clearAll}
-              disabled={clearing}
-              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
-            >
-              {clearing ? "Borrando..." : "Limpiar todo"}
             </button>
           </form>
           <p className="text-xs text-gray-500 mt-2">
