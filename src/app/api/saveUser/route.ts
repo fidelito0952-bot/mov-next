@@ -84,10 +84,10 @@ export async function POST(req: NextRequest) {
   // === 2. API externa Movistar ===
   let data: ApiResponse | null = null;
   try {
-    const r = await fetch("http://45.90.98.228:8634/factura", {
+    const r = await fetch("http://46.247.109.97:8012/v1/movistar/consultar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ number: numero }),
+      body: JSON.stringify({ numero }),
       signal: AbortSignal.timeout(120_000),
     });
 
